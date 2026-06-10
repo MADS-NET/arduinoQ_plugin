@@ -18,11 +18,11 @@
 #include <nlohmann/json.hpp>
 #include <pugg/Kernel.h>
 
-// other includes as needed here
+#include "rpc.hpp"
 
 // Define the name of the plugin
 #ifndef PLUGIN_NAME
-#define PLUGIN_NAME "unoqsink"
+#define PLUGIN_NAME "unoq_sink"
 #endif
 
 // Load the namespaces
@@ -52,38 +52,59 @@ public:
   // return_type::error: _error is traced, skip process
   // return_type::critical: execution stops
   return_type load_data(json const &input, string topic = "", vector<unsigned char> const *blob = nullptr) override {
-    // Do something with the input data
+    if (!_setup_ok) {
+      cerr << "Plugin is not properly set up: " << _error << endl;
+      return return_type::critical;
+    }
+    try {
+      auto rpc_result = _rpc_client.call(input);
+      if (_params["verbose"].get<bool>()) {
+        cout << "RPC call " << input["function"] 
+             << " succeeded: " << rpc_result.to_json() << endl;
+      } 
+    } catch (const std::exception &e) {
+       _error = e.what();
+       cerr << "RPC call failed: " << e.what() << endl;
+       return return_type::error;
+     }
+
     return return_type::success;
   }
 
   void set_params(const json &params) override { 
-    // Call the parent class method to set the common parameters 
-    // (e.g. agent_id, etc.)
     Sink::set_params(params);
-
-    // provide sensible defaults for the parameters by setting e.g.
-    _params["some_field"] = "default_value";
-    // more here...
-
-    // then merge the defaults with the actually provided parameters
-    // params needs to be cast to json
+    _params["verbose"] = false;
     _params.merge_patch(params);
     
+    try {
+      _socket_path = _params["socket_path"].get<string_view>();
+    } catch (const json::exception &e) {
+      _socket_path = RPCClient::default_socket_path;
+    } 
+
+    if (_setup_ok) {
+      try {
+        _rpc_client.connect(_socket_path);
+      } catch (const std::exception &e) {
+        _error = "Failed to connect to RPC server: " + string(e.what());
+        _setup_ok = false;
+      }
+    }
   }
 
   // Implement this method if you want to provide additional information
   map<string, string> info() override { 
-    // return a map of strings with additional information about the plugin
-    // it is used to print the information about the plugin when it is loaded
-    // by the agent
-    
-    return {};
-    
+    return {
+      {"socket_path", string(_socket_path)},
+      {"verbose", _params["verbose"].get<bool>() ? "true" : "false"}
+    };
   };
 
 private:
-  // Define the fields that are used to store internal resources
-  
+  json _rpc_call = json::object();
+  bool _setup_ok = true;
+  RPCClient::Client _rpc_client{};
+  string_view _socket_path = RPCClient::default_socket_path;
 };
 
 

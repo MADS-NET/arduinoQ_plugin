@@ -19,8 +19,6 @@
 
 #include "rpc.hpp"
 
-// other includes as needed here
-
 // Define the name of the plugin
 #ifndef PLUGIN_NAME
 #define PLUGIN_NAME "unoq_source"
@@ -56,6 +54,7 @@ public:
     out.clear();
     if (!_setup_ok) {
       out["error"] = _error;
+      cout << "Plugin is not properly set up: " << _error << endl;
       return return_type::critical;
     }
     if (!_agent_id.empty())
