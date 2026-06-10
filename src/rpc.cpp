@@ -133,6 +133,73 @@ Value object_to_value(const msgpack::object &obj) {
   }
 }
 
+Value json_to_value(const nlohmann::json &value) {
+  if (value.is_null()) {
+    return nullptr;
+  }
+  if (value.is_boolean()) {
+    return value.get<bool>();
+  }
+  if (value.is_number_integer()) {
+    return value.get<int64_t>();
+  }
+  if (value.is_number_unsigned()) {
+    const uint64_t unsigned_value = value.get<uint64_t>();
+    if (unsigned_value >
+        static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+      throw std::invalid_argument(
+          "$.parameters contains unsigned integer out of int64_t range");
+    }
+    return static_cast<int64_t>(unsigned_value);
+  }
+  if (value.is_number_float()) {
+    return value.get<double>();
+  }
+  if (value.is_string()) {
+    return value.get<std::string>();
+  }
+  if (value.is_array()) {
+    Value::array_type converted;
+    converted.reserve(value.size());
+    for (const auto &entry : value) {
+      converted.emplace_back(json_to_value(entry));
+    }
+    return converted;
+  }
+
+  throw std::invalid_argument(
+      "$.parameters contains unsupported value type (only null, bool, "
+      "number, string, and arrays are allowed)");
+}
+
+std::pair<std::string, std::vector<Value>> parse_json_call(
+    const nlohmann::json &call_payload) {
+  if (!call_payload.is_object()) {
+    throw std::invalid_argument("RPC JSON call must be an object");
+  }
+  if (!call_payload.contains("function")) {
+    throw std::invalid_argument("RPC JSON call is missing $.function");
+  }
+  if (!call_payload["function"].is_string()) {
+    throw std::invalid_argument("$.function must be a string");
+  }
+  if (!call_payload.contains("parameters")) {
+    throw std::invalid_argument("RPC JSON call is missing $.parameters");
+  }
+  if (!call_payload["parameters"].is_array()) {
+    throw std::invalid_argument("$.parameters must be an array");
+  }
+
+  std::vector<Value> args;
+  const auto &parameters = call_payload["parameters"];
+  args.reserve(parameters.size());
+  for (const auto &parameter : parameters) {
+    args.emplace_back(json_to_value(parameter));
+  }
+
+  return {call_payload["function"].get<std::string>(), std::move(args)};
+}
+
 void send_all(int socket_fd, const char *data, size_t size) {
   size_t bytes_sent = 0;
   while (bytes_sent < size) {
@@ -343,6 +410,11 @@ Result Client::call(std::string_view method, const std::vector<Value> &args) {
 Result Client::call(std::string_view method,
                     std::initializer_list<Value> args) {
   return call(method, std::vector<Value>(args));
+}
+
+Result Client::call(nlohmann::json call_payload) {
+  auto [method, args] = parse_json_call(call_payload);
+  return call(method, args);
 }
 
 } // namespace RPCClient

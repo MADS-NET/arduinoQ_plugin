@@ -87,7 +87,7 @@ public:
   Result call(std::string_view method,
               const std::vector<Value> &args = std::vector<Value>{});
   Result call(std::string_view method, std::initializer_list<Value> args);
-  Result call(nlohmann::json &call);
+  Result call(nlohmann::json call);
 
 private:
   int _socket_fd = -1;
