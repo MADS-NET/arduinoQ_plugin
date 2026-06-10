@@ -148,7 +148,9 @@ int main(int argc, char const *argv[]) {
   json output, params;
 
   // Set example values to params
-  params["test"] = "value";
+  params["rpc_call"] = "array";
+  params["rpc_args"] = json::array();
+  params["socket_path"] = "/tmp/mads-rpc.sock";
 
   // Set the parameters
   plugin.set_params(params);
@@ -158,12 +160,6 @@ int main(int argc, char const *argv[]) {
 
   // Produce output
   cout << "Output: " << output << endl;
-
-  // Desired LED value
-  bool led_state = true;
-
-  RPCClient::Client client(RPCClient::default_socket_path);
-  client.call("set_led", {led_state});
 
   return 0;
 }
