@@ -185,6 +185,11 @@ int main(int argc, char **argv) {
             send_response(fd, id, &err, nil);
             continue;
           }
+        } else if (method == "array") {
+          pk.pack_array(3);
+          pk.pack(1.1);
+          pk.pack(2.2);
+          pk.pack(3.3);
         } else {
           msgpack::zone z;
           msgpack::object nil;

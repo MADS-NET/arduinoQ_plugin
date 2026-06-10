@@ -172,6 +172,25 @@ Value json_to_value(const nlohmann::json &value) {
       "number, string, and arrays are allowed)");
 }
 
+nlohmann::json value_to_json(const Value &value) {
+  return std::visit(
+      [](const auto &stored) -> nlohmann::json {
+        using Stored = std::decay_t<decltype(stored)>;
+        if constexpr (std::is_same_v<Stored, std::monostate>) {
+          return nullptr;
+        } else if constexpr (std::is_same_v<Stored, Value::array_type>) {
+          nlohmann::json output = nlohmann::json::array();
+          for (const auto &item : stored) {
+            output.push_back(value_to_json(item));
+          }
+          return output;
+        } else {
+          return stored;
+        }
+      },
+      value.storage());
+}
+
 std::pair<std::string, std::vector<Value>> parse_json_call(
     const nlohmann::json &call_payload) {
   if (!call_payload.is_object()) {
@@ -297,6 +316,8 @@ Value::Value(const char *value) {
     _value = std::string(value);
   }
 }
+
+nlohmann::json Value::to_json() const { return value_to_json(*this); }
 
 std::ostream &operator<<(std::ostream &out, const Value &value) {
   out << value_to_string(value);

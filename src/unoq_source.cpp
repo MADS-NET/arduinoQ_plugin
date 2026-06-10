@@ -54,41 +54,72 @@ public:
   return_type get_output(json &out,
                          vector<unsigned char> *blob = nullptr) override {
     out.clear();
-
-    // load the data as necessary and set the fields of the json out variable
-
-    // This sets the agent_id field in the output json object, only when it is
-    // not empty
+    if (!_setup_ok) {
+      out["error"] = _error;
+      return return_type::critical;
+    }
     if (!_agent_id.empty())
       out["agent_id"] = _agent_id;
+
+    try {
+      auto rpc_result = _rpc_client.call(_rpc_call);
+      out["result"] = rpc_result.to_json();
+    } catch (const std::exception &e) {
+      out["error"] = e.what();
+      cout << "RPC call failed: " << e.what() << endl;
+      return return_type::error;
+    }
+
     return return_type::success;
   }
 
   void set_params(const json &params) override {
-    // Call the parent class method to set the common parameters
-    // (e.g. agent_id, etc.)
     Source::set_params(params);
-
-    // provide sensible defaults for the parameters by setting e.g.
-    _params["some_field"] = "default_value";
-    // more here...
-
-    // then merge the defaults with the actually provided parameters
-    // params needs to be cast to json
     _params.merge_patch(params);
+
+    try {
+      _socket_path = _params["socket_path"].get<string_view>();
+    } catch (const json::exception &e) {
+      _socket_path = RPCClient::default_socket_path;
+    } 
+
+    try {
+      _rpc_call["function"] = _params["rpc_call"];
+    } catch (const json::exception &e) {
+      _error = "Invalid rpc_call parameter: " + string(e.what());
+      _setup_ok = false;
+    }
+
+    try {
+      _rpc_call["parameters"] = _params["rpc_args"];
+    } catch (const json::exception &e) {
+      _error = "Invalid rpc_args parameter: " + string(e.what());
+      _setup_ok = false;
+    }
+
+    if (_setup_ok) {
+      try {
+        _rpc_client.connect(_socket_path);
+      } catch (const std::exception &e) {
+        _error = "Failed to connect to RPC server: " + string(e.what());
+        _setup_ok = false;
+      }
+    }
   }
 
   // Implement this method if you want to provide additional information
   map<string, string> info() override {
-    // return a map of strings with additional information about the plugin
-    // it is used to print the information about the plugin when it is loaded
-    // by the agent
-
-    return {};
+    return {
+        {"socket_path", string(_socket_path)},
+        {"rpc_call", _rpc_call.dump()}
+    };
   };
 
 private:
-  // Define the fields that are used to store internal resources
+  json _rpc_call = json::object();
+  bool _setup_ok = true;
+  RPCClient::Client _rpc_client{};
+  string_view _socket_path = RPCClient::default_socket_path;
 };
 
 /*

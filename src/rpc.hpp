@@ -46,6 +46,7 @@ public:
   Value(T value) : _value(static_cast<double>(value)) {}
 
   const storage_type &storage() const { return _value; }
+  nlohmann::json to_json() const;
 
 private:
   template <typename T> static int64_t checked_integer(T value) {
