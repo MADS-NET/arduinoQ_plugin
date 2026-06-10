@@ -51,6 +51,10 @@ The project provides the following binaries:
 * `unoq_sink`: A MADS sink plugin that executes a given RPC call every time a message is received on a given MADS topic. RPC function name and arguments are encoded in the received message (see next section)
 * `unoq_filter`: A MADS filter plugin that executes a given RPC call every time a message is received on a given MADS topic, and forwards the output of the RPC call to the output topic. RPC function name and arguments are encoded in the received message (see next section)
 
+## Arduino sketch
+
+The `arduino` directory contains exampl Arduino sketches that illustrate the usage of the RPC mechanism on the Arduino side. Look at the [documentation](https://docs.arduino.cc/tutorials/uno-q/user-manual/#bridge---remote-procedure-call-rpc-library) for more in-depth explanations.
+
 ## MADS Director file
 
 The `director.toml` and the `mads.ini` file contain example configurations for testing the plugins on a local, development machine (Linux or macOS). The `director.toml` also runs the `qrpc_dummy` server, which simulates the behavior of the Arduino Uno Q for testing purposes.
