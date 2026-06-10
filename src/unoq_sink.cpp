@@ -135,12 +135,15 @@ int main(int argc, char const *argv[]) {
   json input, params;
   
   // Set example values to params
-  params["test"] = "value";
+  params["socket_path"] = "/tmp/mads-rpc.sock";
+  params["verbose"] = true;
 
   // Set the parameters
   plugin.set_params(params);
 
   // Process data
+  input["function"] = "ping";
+  input["parameters"] = json::array();
   plugin.load_data(input);
 
   return 0;

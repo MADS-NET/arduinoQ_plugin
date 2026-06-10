@@ -51,6 +51,24 @@ The project provides the following binaries:
 * `unoq_sink`: A MADS sink plugin that executes a given RPC call every time a message is received on a given MADS topic. RPC function name and arguments are encoded in the received message (see next section)
 * `unoq_filter`: A MADS filter plugin that executes a given RPC call every time a message is received on a given MADS topic, and forwards the output of the RPC call to the output topic. RPC function name and arguments are encoded in the received message (see next section)
 
+## Input messages
+
+The `unoq_sink` and `unoq_filter` plugins expect the input message to be a JSON object with the following format:
+
+```json
+{
+  "function": "function_name",
+  "parameters": [arg1, arg2, arg3, ...]
+}
+```
+
+where `function_name` is the name of the RPC function to call on the Arduino Uno Q, and `parameters` is an array of arguments to pass to the function (if any). Supported types are:
+
+* `string`
+* `int64_t`
+* `double`
+* `bool`
+* an array of any of the above types
 
 ## INI settings
 
@@ -65,6 +83,7 @@ period = 1000  # The period (in milliseconds) at which the RPC call will be exec
 
 [unoq_sink]
 sub_topic = ["unoq_sink"]  # The topic on which the plugin will publish the output of the RPC call
+verbose = false  # Whether to print verbose output
 
 [unoq_filter]
 sub_topic = ["unoq_filter_in"]  # The topic on which the plugin will subscribe to receive the input message
