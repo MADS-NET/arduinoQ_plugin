@@ -1,6 +1,6 @@
 [![Build and Release](https://github.com/MADS-NET/arduinoQ_plugin/actions/workflows/release.yml/badge.svg)](https://github.com/MADS-NET/arduinoQ_plugin/actions/workflows/release.yml)
 
-# arduinoq plugin for MADS
+# arduinoQ plugin for MADS
 
 A collection of [MADS](https://mads-net.github.io) plugins for working with Arduino Uno Q devices.
 
@@ -8,7 +8,7 @@ A collection of [MADS](https://mads-net.github.io) plugins for working with Ardu
 
 ## The Arduino Uno Q
 
-The [Uno Q](https://store.arduino.cc/uno-q) is a new addition to the Arduino Uno family, featuring a powerful microcontroller and enhanced connectivity options. What sets it apart from its predecessors are the two onboard controllers: a CPU running Linux Debian, and a microcontroller (MCU) that can run Arduino code. This dual-controller architecture allows for more complex applications and seamless integration with various sensors and peripherals.
+The [Uno Q](hhttps://www.arduino.cc/product-uno-q) is a new addition to the Arduino Uno family, featuring a powerful microcontroller and enhanced connectivity options. What sets it apart from its predecessors are the two onboard controllers: a CPU running Linux Debian, and a microcontroller (MCU) that can run Arduino code. This dual-controller architecture allows for more complex applications and seamless integration with various sensors and peripherals.
 
 The communication between the Linux CPU and the Arduino MCU is facilitated through Linux service called [Arduino Router](https://docs.arduino.cc/tutorials/uno-q/user-manual/#bridge---remote-procedure-call-rpc-library), which tunnels Remote Procedure Calls (RPC) from the Linux side to the Arduino side and vice-versa. Via RPC, a function implemented on the MCU side (which has access to all physical pins and peripherals) can be called from the Linux side, and a function implemented on the Linux side (which has access to the network and more powerful processing capabilities) can be called from the MCU side.
 
@@ -18,8 +18,8 @@ The communication between the Linux CPU and the Arduino MCU is facilitated throu
 
 The supported platforms for compiling the project are:
 
-* **Linux** 
-* **MacOS**
+* **Linux** (Ubuntu for testing, Arduino Uno Q only for deployment)
+* **MacOS** (testing only)
 
 Windows is **not supported**, for the communication with the Uno Q relies on Unix domain sockets, which are not natively supported on Windows. 
 
@@ -51,6 +51,10 @@ The project provides the following binaries:
 * `unoq_sink`: A MADS sink plugin that executes a given RPC call every time a message is received on a given MADS topic. RPC function name and arguments are encoded in the received message (see next section)
 * `unoq_filter`: A MADS filter plugin that executes a given RPC call every time a message is received on a given MADS topic, and forwards the output of the RPC call to the output topic. RPC function name and arguments are encoded in the received message (see next section)
 
+## MADS Director file
+
+The `director.toml` and the `mads.ini` file contain example configurations for testing the plugins on a local, development machine (Linux or macOS). The `director.toml` also runs the `qrpc_dummy` server, which simulates the behavior of the Arduino Uno Q for testing purposes.
+
 ## Input messages
 
 The `unoq_sink` and `unoq_filter` plugins expect the input message to be a JSON object with the following format:
@@ -77,7 +81,7 @@ The plugin supports the following settings in the INI file:
 ```ini
 [unoq_source]
 pub_topic = "unoq_source"  # The topic on which the plugin will publish the output of the RPC call
-function = "ping"  # The RPC call to execute (the function name on MCU)
+rpc_func = "ping"  # The RPC call to execute (the function name on MCU)
 rpc_args = [] # the list of its arguments, if any
 period = 1000  # The period (in milliseconds) at which the RPC call will be executed
 
@@ -88,8 +92,7 @@ verbose = false  # Whether to print verbose output
 [unoq_filter]
 sub_topic = ["unoq_filter_in"]  # The topic on which the plugin will subscribe to receive the input message
 pub_topic = "unoq_filter_out"  # The topic on which the plugin will publish the output of the RPC call
-function = "ping"  # The RPC call to execute (the function name on MCU)
-rpc_args = [] # the list of its arguments, if any
+verbose = false  # Whether to print verbose output
 ```
 
 All settings are optional; if omitted, the default values are used.
