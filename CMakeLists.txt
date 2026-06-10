@@ -134,7 +134,7 @@ include_directories(${json_SOURCE_DIR}/include)
 add_compile_definitions(MSGPACK_NO_BOOST)
 
 # These plugins are always build and use for testing
-add_plugin(arduinoq SRCS ${SRC_DIR}/rpc.cpp)
+add_plugin(unoq_source SRCS ${SRC_DIR}/rpc.cpp)
 add_executable(qrpc_call ${SRC_DIR}/rpc_call.cpp ${SRC_DIR}/rpc.cpp)
 add_executable(qrpc_dummy ${SRC_DIR}/dummy.cpp)
 
@@ -156,3 +156,34 @@ else()
     COMPONENT MadsApps
   )
 endif()
+
+
+
+# PACKAGE #######################################################################
+string(TOLOWER "${CMAKE_SYSTEM_NAME}" PACKAGE_OS_NAME)
+if(APPLE AND CMAKE_OSX_ARCHITECTURES)
+  list(LENGTH CMAKE_OSX_ARCHITECTURES PACKAGE_OSX_ARCHITECTURES_COUNT)
+  if(PACKAGE_OSX_ARCHITECTURES_COUNT GREATER 1)
+    set(PACKAGE_ARCH_NAME "universal")
+  else()
+    set(PACKAGE_ARCH_NAME "${CMAKE_OSX_ARCHITECTURES}")
+  endif()
+else()
+  set(PACKAGE_ARCH_NAME "${CMAKE_SYSTEM_PROCESSOR}")
+endif()
+if(PACKAGE_ARCH_NAME STREQUAL "")
+  set(PACKAGE_ARCH_NAME "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+endif()
+if(PACKAGE_ARCH_NAME STREQUAL "")
+  set(PACKAGE_ARCH_NAME "unknown")
+endif()
+string(TOLOWER "${PACKAGE_ARCH_NAME}" PACKAGE_ARCH_NAME)
+
+set(CPACK_GENERATOR "ZIP")
+set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
+set(CPACK_PACKAGE_VENDOR "MADS")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY ON)
+set(CPACK_PACKAGE_FILE_NAME
+  "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${PACKAGE_OS_NAME}-${PACKAGE_ARCH_NAME}")
+include(CPack)
