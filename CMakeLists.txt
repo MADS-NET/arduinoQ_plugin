@@ -135,6 +135,8 @@ add_compile_definitions(MSGPACK_NO_BOOST)
 
 # These plugins are always build and use for testing
 add_plugin(unoq_source SRCS ${SRC_DIR}/rpc.cpp)
+add_plugin(unoq_sink SRCS ${SRC_DIR}/rpc.cpp)
+add_plugin(unoq_filter SRCS ${SRC_DIR}/rpc.cpp)
 add_executable(qrpc_call ${SRC_DIR}/rpc_call.cpp ${SRC_DIR}/rpc.cpp)
 add_executable(qrpc_dummy ${SRC_DIR}/dummy.cpp)
 
