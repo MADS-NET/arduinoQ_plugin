@@ -17,11 +17,11 @@
 #include <nlohmann/json.hpp>
 #include <pugg/Kernel.h>
 
-// other includes as needed here
+#include "rpc.hpp"
 
 // Define the name of the plugin
 #ifndef PLUGIN_NAME
-#define PLUGIN_NAME "unoqfilter"
+#define PLUGIN_NAME "unoq_filter"
 #endif
 
 // Load the namespaces
@@ -51,7 +51,26 @@ public:
   // return_type::error: _error is traced, skip process
   // return_type::critical: execution stops
   return_type load_data(json const &input, string topic = "", vector<unsigned char> const *blob = nullptr) override {
-    // Do something with the input data
+    if (!_setup_ok) {
+      cerr << "Plugin is not properly set up: " << _error << endl;
+      return return_type::critical;
+    }
+    if (!input.contains("rpc_func") || !input["rpc_func"].is_string()) {
+      _error = "Input JSON must contain a string field 'rpc_func'";
+      if (_params["verbose"].get<bool>()) {
+        cerr << "Error: " << _error << endl;
+      }
+      return return_type::error;
+    }
+
+    if (!input.contains("rpc_args") || !input["rpc_args"].is_array()) {
+      _error = "Input JSON must contain an array field 'rpc_args'";
+      if (_params["verbose"].get<bool>()) {
+        cerr << "Error: " << _error << endl;
+      }
+      return return_type::error;
+    }
+    _rpc_call = input;
     return return_type::success;
   }
 
@@ -65,43 +84,54 @@ public:
   // return_type::critical: execution stops
   return_type process(json &out, vector<unsigned char> *blob = nullptr) override {
     out.clear();
-
-    // load the data as necessary and set the fields of the json out variable
-
-    // This sets the agent_id field in the output json object, only when it is
-    // not empty
     if (!_agent_id.empty()) out["agent_id"] = _agent_id;
+
+    try {
+      auto rpc_result = _rpc_client.call(_rpc_call);
+      out["result"] = rpc_result.to_json();
+    } catch (const std::exception &e) {
+      out["error"] = e.what();
+      cout << "RPC call failed: " << e.what() << endl;
+      return return_type::error;
+    }
+
     return return_type::success;
   }
   
   void set_params(const json &params) override {
-    // Call the parent class method to set the common parameters 
-    // (e.g. agent_id, etc.)
     Filter::set_params(params);
-
-    // provide sensible defaults for the parameters by setting e.g.
-    _params["some_field"] = "default_value";
-    // more here...
-
-    // then merge the defaults with the actually provided parameters
-    // params needs to be cast to json
+    _params["verbose"] = false;
     _params.merge_patch(params);
-      
+    
+    try {
+      _socket_path = _params["socket_path"].get<string_view>();
+    } catch (const json::exception &e) {
+      _socket_path = RPCClient::default_socket_path;
+    } 
+
+    if (_setup_ok) {
+      try {
+        _rpc_client.connect(_socket_path);
+      } catch (const std::exception &e) {
+        _error = "Failed to connect to RPC server: " + string(e.what());
+        _setup_ok = false;
+      }
+    }
   }
 
   // Implement this method if you want to provide additional information
   map<string, string> info() override { 
-    // return a map of strings with additional information about the plugin
-    // it is used to print the information about the plugin when it is loaded
-    // by the agent
-    
-    return {};
-    
+    return {
+      {"socket_path", string(_socket_path)},
+      {"verbose", _params["verbose"].get<bool>() ? "true" : "false"}
+    };
   };
 
 private:
-  // Define the fields that are used to store internal resources
-  
+  json _rpc_call = json::object();
+  bool _setup_ok = true;
+  RPCClient::Client _rpc_client{};
+  string_view _socket_path = RPCClient::default_socket_path;
 };
 
 
@@ -133,16 +163,18 @@ int main(int argc, char const *argv[])
   json input, output;
 
   // Set example values to params
-  params["test"] = "value";
+  params["socket_path"] = "/tmp/mads-rpc.sock";
+  params["verbose"] = true;
 
   // Set the parameters
   plugin.set_params(params);
 
   // Set input data
-  input["data"] = {
-    {"AX", 1},
-    {"AY", 2},
-    {"AZ", 3}
+  input["rpc_func"] = "echo";
+  input["rpc_args"] = {
+    42,
+    "hello",
+    true
   };
 
   // Set input data

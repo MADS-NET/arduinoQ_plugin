@@ -57,12 +57,12 @@ The `unoq_sink` and `unoq_filter` plugins expect the input message to be a JSON 
 
 ```json
 {
-  "function": "function_name",
-  "parameters": [arg1, arg2, arg3, ...]
+  "rpc_func": "function_name",
+  "rpc_args": [arg1, arg2, arg3, ...]
 }
 ```
 
-where `function_name` is the name of the RPC function to call on the Arduino Uno Q, and `parameters` is an array of arguments to pass to the function (if any). Supported types are:
+where `function_name` is the name of the RPC function to call on the Arduino Uno Q, and `rpc_args` is an array of arguments to pass to the function (if any). Supported types are:
 
 * `string`
 * `int64_t`
@@ -77,7 +77,7 @@ The plugin supports the following settings in the INI file:
 ```ini
 [unoq_source]
 pub_topic = "unoq_source"  # The topic on which the plugin will publish the output of the RPC call
-rpc_call = "ping"  # The RPC call to execute (the function name on MCU)
+function = "ping"  # The RPC call to execute (the function name on MCU)
 rpc_args = [] # the list of its arguments, if any
 period = 1000  # The period (in milliseconds) at which the RPC call will be executed
 
@@ -88,7 +88,7 @@ verbose = false  # Whether to print verbose output
 [unoq_filter]
 sub_topic = ["unoq_filter_in"]  # The topic on which the plugin will subscribe to receive the input message
 pub_topic = "unoq_filter_out"  # The topic on which the plugin will publish the output of the RPC call
-rpc_call = "ping"  # The RPC call to execute (the function name on MCU)
+function = "ping"  # The RPC call to execute (the function name on MCU)
 rpc_args = [] # the list of its arguments, if any
 ```
 

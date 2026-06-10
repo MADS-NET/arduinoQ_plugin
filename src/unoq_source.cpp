@@ -83,14 +83,14 @@ public:
     } 
 
     try {
-      _rpc_call["function"] = _params["rpc_call"];
+      _rpc_call["rpc_func"] = _params["rpc_call"];
     } catch (const json::exception &e) {
       _error = "Invalid rpc_call parameter: " + string(e.what());
       _setup_ok = false;
     }
 
     try {
-      _rpc_call["parameters"] = _params["rpc_args"];
+      _rpc_call["rpc_args"] = _params["rpc_args"];
     } catch (const json::exception &e) {
       _error = "Invalid rpc_args parameter: " + string(e.what());
       _setup_ok = false;

@@ -59,7 +59,7 @@ public:
     try {
       auto rpc_result = _rpc_client.call(input);
       if (_params["verbose"].get<bool>()) {
-        cout << "RPC call " << input["function"] 
+        cout << "RPC call " << input["rpc_func"] 
              << " succeeded: " << rpc_result.to_json() << endl;
       } 
     } catch (const std::exception &e) {
@@ -142,8 +142,8 @@ int main(int argc, char const *argv[]) {
   plugin.set_params(params);
 
   // Process data
-  input["function"] = "ping";
-  input["parameters"] = json::array();
+  input["rpc_func"] = "ping";
+  input["rpc_args"] = json::array();
   plugin.load_data(input);
 
   return 0;

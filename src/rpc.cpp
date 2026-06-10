@@ -196,27 +196,27 @@ std::pair<std::string, std::vector<Value>> parse_json_call(
   if (!call_payload.is_object()) {
     throw std::invalid_argument("RPC JSON call must be an object");
   }
-  if (!call_payload.contains("function")) {
-    throw std::invalid_argument("RPC JSON call is missing $.function");
+  if (!call_payload.contains("rpc_func")) {
+    throw std::invalid_argument("RPC JSON call is missing $.rpc_func");
   }
-  if (!call_payload["function"].is_string()) {
+  if (!call_payload["rpc_func"].is_string()) {
     throw std::invalid_argument("$.function must be a string");
   }
-  if (!call_payload.contains("parameters")) {
-    throw std::invalid_argument("RPC JSON call is missing $.parameters");
+  if (!call_payload.contains("rpc_args")) {
+    throw std::invalid_argument("RPC JSON call is missing $.rpc_args");
   }
-  if (!call_payload["parameters"].is_array()) {
+  if (!call_payload["rpc_args"].is_array()) {
     throw std::invalid_argument("$.parameters must be an array");
   }
 
   std::vector<Value> args;
-  const auto &parameters = call_payload["parameters"];
+  const auto &parameters = call_payload["rpc_args"];
   args.reserve(parameters.size());
   for (const auto &parameter : parameters) {
     args.emplace_back(json_to_value(parameter));
   }
 
-  return {call_payload["function"].get<std::string>(), std::move(args)};
+  return {call_payload["rpc_func"].get<std::string>(), std::move(args)};
 }
 
 void send_all(int socket_fd, const char *data, size_t size) {

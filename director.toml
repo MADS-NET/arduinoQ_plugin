@@ -44,3 +44,21 @@ enabled = false
 scale = 1
 relaunch = false
 tty = true
+
+[unoq_filter]
+command = "mads source build/unoq_filter"
+after = "dummy"
+workdir = ""
+enabled = false
+scale = 1
+relaunch = false
+tty = true
+
+[unoq_sink]
+command = "mads source build/unoq_sink"
+after = "dummy"
+workdir = ""
+enabled = false
+scale = 1
+relaunch = false
+tty = true
