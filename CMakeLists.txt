@@ -58,7 +58,6 @@ FetchContent_Declare(json
 
 
 set(MSGPACK_USE_BOOST OFF)
-set(MSGPACK_USE_STD_VARIANT_ADAPTOR ON)
 set(MSGPACK_CXX17 ON)
 set(MSGPACK_BUILD_DOCS OFF)
 FetchContent_Declare(msgpack
@@ -132,10 +131,11 @@ else()
   set(CMAKE_INSTALL_RPATH "\$ORIGIN/../lib;/usr/local/lib")
 endif()
 include_directories(${json_SOURCE_DIR}/include)
+add_compile_definitions(MSGPACK_NO_BOOST)
 
 # These plugins are always build and use for testing
-add_plugin(arduinoq)
-add_executable(qrpc_call ${SRC_DIR}/rpc_call.cpp)
+add_plugin(arduinoq SRCS ${SRC_DIR}/rpc.cpp)
+add_executable(qrpc_call ${SRC_DIR}/rpc_call.cpp ${SRC_DIR}/rpc.cpp)
 add_executable(qrpc_dummy ${SRC_DIR}/dummy.cpp)
 
 

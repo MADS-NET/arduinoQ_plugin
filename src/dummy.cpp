@@ -1,5 +1,3 @@
-#define MSGPACK_USE_STD_VARIANT_ADAPTOR
-#define MSGPACK_NO_BOOST
 #include <msgpack.hpp>
 
 #include <sys/socket.h>
@@ -20,9 +18,7 @@
 
 static volatile std::sig_atomic_t Running = 1;
 
-static void handle_sigint(int) {
-  Running = 0;
-}
+static void handle_sigint(int) { Running = 0; }
 
 static void write_all(int fd, const char *data, size_t size) {
   size_t done = 0;
@@ -61,7 +57,8 @@ static std::string format_echo_arg(const msgpack::object &arg) {
     out << "bool: " << (arg.as<bool>() ? "true" : "false");
     break;
   case msgpack::type::POSITIVE_INTEGER:
-    if (arg.via.u64 > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+    if (arg.via.u64 >
+        static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
       throw std::runtime_error("integer argument is out of int64_t range");
     }
     out << "int64_t: " << static_cast<int64_t>(arg.via.u64);
@@ -133,7 +130,6 @@ int main(int argc, char **argv) {
 
   std::cout << "dummy RPC server listening on " << path << "\n";
 
-  
   while (Running) {
     int fd = ::accept(srv, nullptr, nullptr);
     if (fd < 0) {
@@ -144,7 +140,7 @@ int main(int argc, char **argv) {
       return 1;
     }
     msgpack::unpacker unp;
-    
+
     while (Running) {
       unp.reserve_buffer(4096);
       ssize_t n = ::read(fd, unp.buffer(), unp.buffer_capacity());
