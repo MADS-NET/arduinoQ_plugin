@@ -3,10 +3,17 @@
 #define MSGPACK_USE_STD_VARIANT_ADAPTOR
 #define MSGPACK_NO_BOOST
 #include <msgpack.hpp>
+#include <cerrno>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <limits>
 #include <sstream>
+#include <stdexcept>
+#include <string>
+#include <utility>
 #include <variant>
 #include <vector>
-#include <filesystem>
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -40,7 +47,10 @@ void open_socket(const char *socket_path = SOCKET_PATH) {
   if (_socket_fd < 0) {
     throw std::runtime_error("Error creating socket: " + std::string(strerror(errno)));
   }
-
+  struct timeval tv;
+  tv.tv_sec = 5;  // 5 second timeout
+  tv.tv_usec = 0;
+  setsockopt(_socket_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
   struct sockaddr_un server_addr;
   memset(&server_addr, 0, sizeof(server_addr));
   server_addr.sun_family = AF_UNIX;
@@ -102,67 +112,134 @@ std::vector<msgpack_variant> execute() {
   }
   int type = 0; // REQUEST
   static uint32_t msgid = 0;
-  std::stringstream buffer;
-  std::string data;
+  uint32_t request_msgid = msgid++;
+  msgpack::sbuffer buffer;
   try {
-    msgpack::pack(buffer, std::make_tuple(type, msgid++, _name, _args));
-    data = buffer.str();
+    msgpack::packer<msgpack::sbuffer> pk(buffer);
+    pk.pack_array(4);
+    pk.pack(type);
+    pk.pack(request_msgid);
+    pk.pack(_name);
+    pack_args(pk);
   } catch (const std::exception &e) {
     throw std::runtime_error("Error packing data: " + std::string(e.what()));
   }
-  ssize_t bytes_sent = send(_socket_fd, data.data(), data.size(), 0);
-  if (bytes_sent < 0) {
-    throw std::runtime_error("Error sending data: " + std::string(strerror(errno)));
+
+  size_t bytes_sent = 0;
+  while (bytes_sent < buffer.size()) {
+    ssize_t n = send(_socket_fd, buffer.data() + bytes_sent,
+                     buffer.size() - bytes_sent, 0);
+    if (n < 0) {
+      throw std::runtime_error("Error sending data: " +
+                               std::string(strerror(errno)));
+    }
+    if (n == 0) {
+      throw std::runtime_error("Socket closed while sending request");
+    }
+    bytes_sent += static_cast<size_t>(n);
   }
 
-  // Read response with dynamic buffer that grows as needed
-  std::vector<char> response_buffer;
-  response_buffer.reserve(4096);
-  
-  char read_buf[4096];
-  ssize_t bytes_received;
-  do {
-    ssize_t n = recv(_socket_fd, read_buf, sizeof(read_buf), 0);
+  msgpack::unpacker unp;
+  msgpack::object_handle oh;
+  while (true) {
+    unp.reserve_buffer(4096);
+    ssize_t n = recv(_socket_fd, unp.buffer(), unp.buffer_capacity(), 0);
     if (n < 0) {
-      if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        // No more data available right now, break out
-        break;
-      }
       throw std::runtime_error("Error receiving response: " + std::string(strerror(errno)));
     }
     if (n == 0) {
-      // Connection closed by peer
+      throw std::runtime_error("Connection closed before response was received");
+    }
+    unp.buffer_consumed(static_cast<size_t>(n));
+    if (unp.next(oh)) {
       break;
     }
-    response_buffer.insert(response_buffer.end(), read_buf, read_buf + n);
-  } while (true);
-
-  if (response_buffer.empty()) {
-    throw std::runtime_error("No response received");
   }
 
-  msgpack::object_handle oh = msgpack::unpack(response_buffer.data(), response_buffer.size());
   msgpack::object obj = oh.get();
   if (obj.type != msgpack::type::ARRAY || obj.via.array.size != 4) {
     throw std::runtime_error("Invalid response format");
   }
   int response_type = obj.via.array.ptr[0].as<int>();
   uint32_t response_msgid = obj.via.array.ptr[1].as<uint32_t>();
-  std::string response_function = obj.via.array.ptr[2].as<std::string>();
-  std::vector<msgpack_variant> response_args = obj.via.array.ptr[3].as<std::vector<msgpack_variant>>();
-  if (response_type != 1 || response_msgid != msgid - 1 || response_function != _name) {
+  if (response_type != 1 || response_msgid != request_msgid) {
     throw std::runtime_error("Response does not match the request");
   }
 
+  const msgpack::object &error = obj.via.array.ptr[2];
+  if (error.type != msgpack::type::NIL) {
+    throw std::runtime_error("RPC error: " + object_to_string(error));
+  }
 
-  return response_args; // Return the parsed response arguments
+  return object_to_result(obj.via.array.ptr[3]);
 }
 
 
 private:
+  template <typename Packer>
+  static void pack_arg(Packer &pk, const msgpack_variant &arg) {
+    std::visit([&pk](const auto &value) { pk.pack(value); }, arg);
+  }
+
+  template <typename Packer>
+  void pack_args(Packer &pk) const {
+    pk.pack_array(static_cast<uint32_t>(_args.size()));
+    for (const auto &arg : _args) {
+      pack_arg(pk, arg);
+    }
+  }
+
+  static std::string object_to_string(const msgpack::object &obj) {
+    if (obj.type == msgpack::type::STR) {
+      return obj.as<std::string>();
+    }
+
+    std::ostringstream out;
+    out << obj;
+    return out.str();
+  }
+
+  static msgpack_variant object_to_variant(const msgpack::object &obj) {
+    switch (obj.type) {
+    case msgpack::type::BOOLEAN:
+      return obj.as<bool>();
+    case msgpack::type::POSITIVE_INTEGER:
+      if (obj.via.u64 > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+        throw std::runtime_error("RPC integer result is out of range");
+      }
+      return static_cast<int64_t>(obj.via.u64);
+    case msgpack::type::NEGATIVE_INTEGER:
+      return obj.as<int64_t>();
+    case msgpack::type::FLOAT32:
+    case msgpack::type::FLOAT64:
+      return obj.as<double>();
+    case msgpack::type::STR:
+      return obj.as<std::string>();
+    default:
+      throw std::runtime_error("Unsupported RPC result type: " +
+                               object_to_string(obj));
+    }
+  }
+
+  static std::vector<msgpack_variant> object_to_result(const msgpack::object &obj) {
+    if (obj.type == msgpack::type::NIL) {
+      return {};
+    }
+    if (obj.type != msgpack::type::ARRAY) {
+      return {object_to_variant(obj)};
+    }
+
+    std::vector<msgpack_variant> result;
+    result.reserve(obj.via.array.size);
+    for (uint32_t i = 0; i < obj.via.array.size; ++i) {
+      result.push_back(object_to_variant(obj.via.array.ptr[i]));
+    }
+    return result;
+  }
+
   std::string _name;
   std::stringstream _buffer;
-  int _socket_fd;
+  int _socket_fd = -1;
   std::vector<msgpack_variant> _args;
 }; // class FunctionCall
 } // namespace RPCClient

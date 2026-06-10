@@ -56,6 +56,11 @@ FetchContent_Declare(json
   EXCLUDE_FROM_ALL
 )
 
+
+set(MSGPACK_USE_BOOST OFF)
+set(MSGPACK_USE_STD_VARIANT_ADAPTOR ON)
+set(MSGPACK_CXX17 ON)
+set(MSGPACK_BUILD_DOCS OFF)
 FetchContent_Declare(msgpack
   URL https://github.com/msgpack/msgpack-c/releases/download/cpp-8.0.0/msgpack-cxx-8.0.0.tar.gz
   DOWNLOAD_EXTRACT_TIMESTAMP TRUE
@@ -130,7 +135,8 @@ include_directories(${json_SOURCE_DIR}/include)
 
 # These plugins are always build and use for testing
 add_plugin(arduinoq)
-add_executable(rpc_call ${SRC_DIR}/rpc_call.cpp)
+add_executable(qrpc_call ${SRC_DIR}/rpc_call.cpp)
+add_executable(qrpc_dummy ${SRC_DIR}/dummy.cpp)
 
 
 
