@@ -6,6 +6,11 @@ https://github.com/mads-net/arduinoQ_plugin set of plugins.
 
 Funcions here provided can be called via RPS from a MADS agent.
 
+REQUIRED LIBRARIES (exact names):
+- Arduino_RouterBridge
+- MsgPack
+- ArduinoJson
+
 Use the command:
 > qrpc_call <function_name> [args]
 on the Linux sidefor testing this sketch.
@@ -13,11 +18,12 @@ on the Linux sidefor testing this sketch.
 Author: Paolo Bosetti, University of Trento
 */
 
+// Required libraries
 #include <Arduino_RouterBridge.h>
 #include <ArduinoJson.h>
-#include <TaskScheduler.h>
-#include <array>
 #include <MsgPack.h>
+// Standard library
+#include <array>
 
 static constexpr size_t N = 8;
 
