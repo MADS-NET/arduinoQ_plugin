@@ -38,7 +38,7 @@ sudo cmake --build build -t package
 which produces a `.tar.gz` file in the `build` directory. Extract the content of the archive in the MADS prefix (e.g. `/usr/local/mads`):
 
 ```bash
-sudo tar -xzf build/arduinoq_plugin-*.tar.gz -C "$(mads -p)"
+sudo tar xzf path/to/arduinoq*.tar.gz -C "$(mads -p)" --strip-components=1
 ```
 
 ## Available binaries
@@ -53,7 +53,7 @@ The project provides the following binaries:
 
 ## Arduino sketch
 
-The `arduino` directory contains exampl Arduino sketches that illustrate the usage of the RPC mechanism on the Arduino side. Look at the [documentation](https://docs.arduino.cc/tutorials/uno-q/user-manual/#bridge---remote-procedure-call-rpc-library) for more in-depth explanations.
+The `arduino` directory contains example Arduino sketches that illustrate the usage of the RPC mechanism on the Arduino side. Look at the [documentation](https://docs.arduino.cc/tutorials/uno-q/user-manual/#bridge---remote-procedure-call-rpc-library) for more in-depth explanations.
 
 ## MADS Director file
 
