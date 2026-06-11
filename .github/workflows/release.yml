@@ -64,7 +64,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: package-${{ matrix.id }}
-          path: build/*.zip
+          path: build/*.tar.gz
           if-no-files-found: error
 
   release:
@@ -102,9 +102,9 @@ jobs:
           notes="Automated packages for ${GITHUB_SHA}."
 
           if gh release view "${tag_name}" >/dev/null 2>&1; then
-            gh release upload "${tag_name}" dist/*.zip --clobber
+            gh release upload "${tag_name}" dist/*.tar.gz --clobber
           else
-            gh release create "${tag_name}" dist/*.zip \
+            gh release create "${tag_name}" dist/*.tar.gz \
               --target "${GITHUB_SHA}" \
               --title "${release_title}" \
               --notes "${notes}" \
