@@ -2,7 +2,7 @@
 Arduino Uno Q sketch for MADS
 
 This sketch is an example to develop the MCU counterpart for the 
-https://github.io/mads-net/arduinoQ_plugin set of plugins.
+https://github.com/mads-net/arduinoQ_plugin set of plugins.
 
 Funcions here provided can be called via RPS from a MADS agent.
 

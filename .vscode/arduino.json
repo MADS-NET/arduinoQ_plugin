@@ -1,0 +1,6 @@
+{
+    "port": "/dev/tty.usbmodem22544273912",
+    "configuration": "link_mode=dynamic,wait_linux_boot=yes",
+    "board": "arduino:zephyr:unoq",
+    "sketch": "arduino/rpc_server/rpc_server.ino"
+}

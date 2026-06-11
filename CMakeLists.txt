@@ -11,7 +11,24 @@
 # Creation date: 2026-06-09T13:28:17.357+0200
 # NOTICE: MADS Version 2.1.1
 cmake_minimum_required(VERSION 3.28)
-project(arduinoq VERSION 2.1.1 LANGUAGES CXX)
+
+# Get the latest git tag or default to 0.1.0
+execute_process(
+  COMMAND git describe --tags --abbrev=0
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  OUTPUT_VARIABLE GIT_VERSION
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET
+)
+if(GIT_VERSION MATCHES "^v")
+  string(SUBSTRING "${GIT_VERSION}" 1 -1 GIT_VERSION)
+endif()
+if(NOT GIT_VERSION)
+  set(GIT_VERSION "0.1.0")
+endif()
+
+
+project(arduinoq VERSION ${GIT_VERSION} LANGUAGES CXX)
 if(CMAKE_BUILD_TYPE STREQUAL "")
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
 endif()
@@ -138,8 +155,9 @@ add_plugin(unoq_source SRCS ${SRC_DIR}/rpc.cpp)
 add_plugin(unoq_sink SRCS ${SRC_DIR}/rpc.cpp)
 add_plugin(unoq_filter SRCS ${SRC_DIR}/rpc.cpp)
 add_executable(qrpc_call ${SRC_DIR}/rpc_call.cpp ${SRC_DIR}/rpc.cpp)
+list(APPEND TARGET_LIST qrpc_call)
 add_executable(qrpc_dummy ${SRC_DIR}/dummy.cpp)
-
+list(APPEND TARGET_LIST qrpc_dummy)
 
 
 # INSTALL ######################################################################
@@ -181,7 +199,7 @@ if(PACKAGE_ARCH_NAME STREQUAL "")
 endif()
 string(TOLOWER "${PACKAGE_ARCH_NAME}" PACKAGE_ARCH_NAME)
 
-set(CPACK_GENERATOR "ZIP")
+set(CPACK_GENERATOR "TGZ")
 set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
 set(CPACK_PACKAGE_VENDOR "MADS")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
