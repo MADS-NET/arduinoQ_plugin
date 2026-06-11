@@ -51,7 +51,7 @@ The project provides the following binaries:
 * `unoq_sink`: A MADS sink plugin that executes a given RPC call every time a message is received on a given MADS topic. RPC function name and arguments are encoded in the received message (see next section)
 * `unoq_filter`: A MADS filter plugin that executes a given RPC call every time a message is received on a given MADS topic, and forwards the output of the RPC call to the output topic. RPC function name and arguments are encoded in the received message (see next section)
 
-## Arduino sketch
+## Arduino sketches
 
 The `arduino` directory contains example Arduino sketches that illustrate the usage of the RPC mechanism on the Arduino side. Look at the [documentation](https://docs.arduino.cc/tutorials/uno-q/user-manual/#bridge---remote-procedure-call-rpc-library) for more in-depth explanations.
 
@@ -60,6 +60,16 @@ Once uploaded the sketch, you can test it on the Linux side of the Uno Q with th
 ```bash
 qrpc_client <function_name> [arg1 arg2 arg3 ...]
 ```
+
+The sketch `rcp_server.ino` implements a few RPC functions:
+
+* `set_led_state`: Accepts a boolean and togles the onboard LED
+* `get_digital_pin`: Accepts a pin number and returns its digital value
+* `get_analog_pin`: Accepts a pin number and returns its analog value
+* `get_json`: Returns a JSON object
+* `get_three_arrays`: Returns three arrays of different types
+
+The sketch `rpc_server_modulino.ino` needs a **Modulino Movement** IMU board, and reads its acceleration values, accumulate into a buffer, and when the `get_fft` RPC function is invoked it returns the FFT of the acceleration values in the buffer.
 
 ## MADS Director file
 
