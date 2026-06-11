@@ -4,6 +4,8 @@
 
 A collection of [MADS](https://mads-net.github.io) plugins for working with Arduino Uno Q devices.
 
+> See the official [guide](https://mads-net.github.io/guides/arduino_uno_q.html).
+
 *Required MADS version: 2.1.0.*
 
 ## The Arduino Uno Q
