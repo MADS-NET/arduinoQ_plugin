@@ -101,7 +101,7 @@ void setup() {
 
   // Bridge setup
   Bridge.begin();
-  Bridge.provide_safe("get_fft", get_fft);
+  Bridge.provide("get_fft", get_fft);
 
   Monitor.println("done!");
 }
