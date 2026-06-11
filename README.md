@@ -55,6 +55,12 @@ The project provides the following binaries:
 
 The `arduino` directory contains example Arduino sketches that illustrate the usage of the RPC mechanism on the Arduino side. Look at the [documentation](https://docs.arduino.cc/tutorials/uno-q/user-manual/#bridge---remote-procedure-call-rpc-library) for more in-depth explanations.
 
+Once uploaded the sketch, you can test it on the Linux side of the Uno Q with the command:
+
+```bash
+qrpc_client <function_name> [arg1 arg2 arg3 ...]
+```
+
 ## MADS Director file
 
 The `director.toml` and the `mads.ini` file contain example configurations for testing the plugins on a local, development machine (Linux or macOS). The `director.toml` also runs the `qrpc_dummy` server, which simulates the behavior of the Arduino Uno Q for testing purposes.
