@@ -29,5 +29,11 @@ void loop() {
   }
 
   LastNotifyMicros = now;
+  // Notify any number of parameters under the name "mads_notify"
   Bridge.notify("mads_notify", Counter++, now);
+  // you might want to notify other values under a different name, just call:
+  // Bridge.notify("mads_other", "other message");
+  // And remember to add in the ini file under the key `provided_rpc` the list 
+  // of notify names, eg `provided_rpc = ["mads_notify", "mads_other"]`
+
 }
