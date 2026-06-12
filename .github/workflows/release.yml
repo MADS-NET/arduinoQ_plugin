@@ -64,7 +64,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: package-${{ matrix.id }}
-          path: build/*.tar.gz
+          path: |
+            build/*.tar.gz
+            build/*.zip
           if-no-files-found: error
 
   release:
