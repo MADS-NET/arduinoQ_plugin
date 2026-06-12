@@ -1,0 +1,30 @@
+{
+  "name": "arduinoQ_plugin",
+  "requirements": {
+    "Common": {
+      "note": [
+        "Requires MADS 2.1.0 or later",
+        "Requires an Arduino Uno Q properly programmed",
+        "Look at https://github.com/MADS-NET/arduinoQ_plugin/tree/main/arduino for examples",
+        "Provides unoq_source, unoq_filter, and unoq_sink plugins to read and write data to the Arduino Uno Q MCU"
+      ] 
+    },
+    "Linux": {
+      "note": [
+        "Requires Ubuntu 22.04 or later to compile",
+        "Requires an Arduino Uno Q to run"
+      ],
+      "commands": []
+    },
+    "macOS": {
+      "note": [
+        "Requires macOS 10.15 or later",
+        "You might need to remove the quarantine protection on the plugin once installed",
+        "macOS is supported for development only, and not for production use"
+      ],
+      "commands": [
+        "xattr -d com.apple.quarantine $(mads -p)/lib/arduino.plugin"
+      ]
+    }
+  }
+}
