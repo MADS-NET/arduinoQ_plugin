@@ -103,10 +103,12 @@ jobs:
 
           if gh release view "${tag_name}" >/dev/null 2>&1; then
             gh release upload "${tag_name}" dist/*.tar.gz --clobber
+            gh release upload "${tag_name}" dist/*.zip --clobber
           else
             gh release create "${tag_name}" dist/*.tar.gz \
               --target "${GITHUB_SHA}" \
               --title "${release_title}" \
               --notes "${notes}" \
               "${release_flags[@]}"
+            gh release upload "${tag_name}" dist/*.zip --clobber
           fi
