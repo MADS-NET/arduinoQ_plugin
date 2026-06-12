@@ -5,6 +5,7 @@
 #include <initializer_list>
 #include <iosfwd>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -67,6 +68,18 @@ using Result = Value;
 std::ostream &operator<<(std::ostream &out, const Value &value);
 std::string to_string(const Value &value);
 
+struct Message {
+  enum class Type { request, notification };
+
+  Type type = Type::notification;
+  uint32_t msgid = 0;
+  std::string method;
+  std::vector<Value> args;
+
+  bool expects_response() const { return type == Type::request; }
+  nlohmann::json to_json() const;
+};
+
 class Client {
 public:
   Client() = default;
@@ -93,6 +106,37 @@ public:
 private:
   int _socket_fd = -1;
   uint32_t _next_msgid = 0;
+};
+
+class Endpoint {
+public:
+  Endpoint();
+  explicit Endpoint(std::string_view socket_path);
+  ~Endpoint();
+
+  Endpoint(const Endpoint &) = delete;
+  Endpoint &operator=(const Endpoint &) = delete;
+
+  bool is_open() const { return _socket_fd >= 0; }
+  void close();
+
+  void connect(std::string_view socket_path = default_socket_path);
+  void register_method(std::string_view method);
+  void reset_methods();
+
+  Message receive();
+  void respond(uint32_t msgid, const Value &result = nullptr);
+  void respond_error(uint32_t msgid, std::string_view error);
+
+private:
+  struct StreamState;
+
+  Result request(std::string_view method,
+                 const std::vector<Value> &args = std::vector<Value>{});
+
+  int _socket_fd = -1;
+  uint32_t _next_msgid = 0;
+  std::unique_ptr<StreamState> _stream;
 };
 
 } // namespace RPCClient

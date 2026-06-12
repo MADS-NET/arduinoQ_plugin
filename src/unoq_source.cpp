@@ -17,6 +17,12 @@
 #include <pugg/Kernel.h>
 #include <source.hpp>
 
+#include <atomic>
+#include <chrono>
+#include <deque>
+#include <mutex>
+#include <thread>
+
 #include "rpc.hpp"
 
 // Define the name of the plugin
@@ -38,6 +44,7 @@ public:
   // the parent constructor. Normally, use set_params() to set the parameters
   // instead of the constructor.
   using Source::Source; // inherit constructors
+  ~UnoQSourcePlugin() { stop_receiver(); }
 
   // Typically, no need to change this
   string kind() override { return PLUGIN_NAME; }
@@ -57,8 +64,50 @@ public:
       cout << "Plugin is not properly set up: " << _error << endl;
       return return_type::critical;
     }
-    if (!_agent_id.empty())
+
+    if (_mode == SourceMode::notify) {
+      json queued_batches = json::object();
+      for (const auto &method : _provided_methods) {
+        queued_batches[method] = json::array();
+      }
+      bool has_messages = false;
+      {
+        lock_guard<mutex> lock(_queue_mutex);
+        while (!_message_queue.empty()) {
+          json queued_message = std::move(_message_queue.front());
+          _message_queue.pop_front();
+
+          const string message_func =
+              queued_message.value("rpc_func", string());
+
+          if (queued_message.contains("rpc_args")) {
+            queued_batches[message_func].push_back(
+                std::move(queued_message["rpc_args"]));
+          } else {
+            queued_batches[message_func].push_back(json::array());
+          }
+          has_messages = true;
+        }
+        if (!has_messages && !_receiver_error.empty()) {
+          out["error"] = _receiver_error;
+          return return_type::error;
+        }
+      }
+
+      if (!has_messages) {
+        return return_type::retry;
+      }
+
+      out = std::move(queued_batches);
+      if (!_agent_id.empty()) {
+        out["agent_id"] = _agent_id;
+      }
+      return return_type::success;
+    }
+
+    if (!_agent_id.empty()) {
       out["agent_id"] = _agent_id;
+    }
 
     try {
       auto rpc_result = _rpc_client.call(_rpc_call);
@@ -73,30 +122,52 @@ public:
   }
 
   void set_params(const json &params) override {
+    stop_receiver();
     Source::set_params(params);
+    _setup_ok = true;
+    _error.clear();
+    _rpc_call = json::object();
+    _provided_methods.clear();
+    {
+      lock_guard<mutex> lock(_queue_mutex);
+      _message_queue.clear();
+      _receiver_error.clear();
+    }
+
+    _params["mode"] = "call";
+    _params["max_queue"] = default_max_queue;
+    _params["overflow"] = "drop_oldest";
     _params.merge_patch(params);
 
     try {
-      _socket_path = _params["socket_path"].get<string_view>();
+      _socket_path = _params.value("socket_path",
+                                   string(RPCClient::default_socket_path));
     } catch (const json::exception &e) {
-      _socket_path = RPCClient::default_socket_path;
-    } 
-
-    try {
-      _rpc_call["rpc_func"] = _params["rpc_call"];
-    } catch (const json::exception &e) {
-      _error = "Invalid rpc_call parameter: " + string(e.what());
-      _setup_ok = false;
+      _socket_path = string(RPCClient::default_socket_path);
     }
 
     try {
-      _rpc_call["rpc_args"] = _params["rpc_args"];
+      const string mode = _params.value("mode", string("call"));
+      if (mode == "call" || mode == "poll") {
+        _mode = SourceMode::call;
+      } else if (mode == "notify" || mode == "receive") {
+        _mode = SourceMode::notify;
+      } else {
+        _error = "Invalid mode parameter: " + mode;
+        _setup_ok = false;
+      }
     } catch (const json::exception &e) {
-      _error = "Invalid rpc_args parameter: " + string(e.what());
+      _error = "Invalid mode parameter: " + string(e.what());
       _setup_ok = false;
     }
 
-    if (_setup_ok) {
+    if (_mode == SourceMode::call) {
+      setup_call_params();
+    } else if (_mode == SourceMode::notify) {
+      setup_notify_params();
+    }
+
+    if (_setup_ok && _mode == SourceMode::call) {
       try {
         _rpc_client.connect(_socket_path);
       } catch (const std::exception &e) {
@@ -104,21 +175,227 @@ public:
         _setup_ok = false;
       }
     }
+
+    if (_setup_ok && _mode == SourceMode::notify) {
+      try {
+        start_receiver();
+      } catch (const std::exception &e) {
+        _error = "Failed to start RPC receiver: " + string(e.what());
+        _setup_ok = false;
+      }
+    }
   }
 
   // Implement this method if you want to provide additional information
   map<string, string> info() override {
+    if (_mode == SourceMode::notify) {
+      lock_guard<mutex> lock(_queue_mutex);
+      return {
+          {"socket_path", _socket_path},
+          {"mode", "notify"},
+          {"overflow", _overflow_policy},
+          {"provided_rpc", json(_provided_methods).dump()},
+          {"max_queue", to_string(_max_queue)},
+          {"queue_size", to_string(_message_queue.size())}
+      };
+    }
+
     return {
-        {"socket_path", string(_socket_path)},
+        {"socket_path", _socket_path},
+        {"mode", "call"},
         {"rpc_call", _rpc_call.dump()}
     };
   };
 
 private:
+  enum class SourceMode { call, notify };
+
+  void setup_call_params() {
+    try {
+      const char *rpc_call_key =
+          _params.contains("rpc_call") ? "rpc_call" : "rpc_func";
+      _rpc_call["rpc_func"] = _params.at(rpc_call_key);
+    } catch (const json::exception &e) {
+      _error = "Invalid rpc_call parameter: " + string(e.what());
+      _setup_ok = false;
+      return;
+    }
+
+    try {
+      if (_params.contains("rpc_args")) {
+        _rpc_call["rpc_args"] = _params["rpc_args"];
+      } else {
+        _rpc_call["rpc_args"] = json::array();
+      }
+      if (!_rpc_call["rpc_args"].is_array()) {
+        _error = "Invalid rpc_args parameter: must be an array";
+        _setup_ok = false;
+      }
+    } catch (const json::exception &e) {
+      _error = "Invalid rpc_args parameter: " + string(e.what());
+      _setup_ok = false;
+    }
+  }
+
+  void setup_notify_params() {
+    try {
+      if (_params.contains("provided_rpc")) {
+        parse_provided_methods(_params["provided_rpc"]);
+      } else if (_params.contains("rpc_call")) {
+        parse_provided_methods(_params["rpc_call"]);
+      } else if (_params.contains("rpc_func")) {
+        parse_provided_methods(_params["rpc_func"]);
+      } else {
+        _error = "Notify mode requires provided_rpc, rpc_call, or rpc_func";
+        _setup_ok = false;
+        return;
+      }
+    } catch (const std::exception &e) {
+      _error = "Invalid provided_rpc parameter: " + string(e.what());
+      _setup_ok = false;
+      return;
+    }
+
+    try {
+      _max_queue = _params["max_queue"].get<size_t>();
+      if (_max_queue == 0) {
+        _error = "Invalid max_queue parameter: must be greater than zero";
+        _setup_ok = false;
+        return;
+      }
+    } catch (const json::exception &e) {
+      _error = "Invalid max_queue parameter: " + string(e.what());
+      _setup_ok = false;
+      return;
+    }
+
+    try {
+      _overflow_policy = _params.value("overflow", string("drop_oldest"));
+      if (_overflow_policy != "drop_oldest" &&
+          _overflow_policy != "drop_newest") {
+        _error = "Invalid overflow parameter: use drop_oldest or drop_newest";
+        _setup_ok = false;
+      }
+    } catch (const json::exception &e) {
+      _error = "Invalid overflow parameter: " + string(e.what());
+      _setup_ok = false;
+    }
+  }
+
+  void parse_provided_methods(const json &methods) {
+    if (methods.is_string()) {
+      _provided_methods.push_back(methods.get<string>());
+    } else if (methods.is_array()) {
+      for (const auto &method : methods) {
+        if (!method.is_string()) {
+          throw invalid_argument("provided_rpc entries must be strings");
+        }
+        _provided_methods.push_back(method.get<string>());
+      }
+    } else {
+      throw invalid_argument(
+          "provided_rpc must be a string or an array of strings");
+    }
+
+    for (const auto &method : _provided_methods) {
+      if (method.empty()) {
+        _error = "Invalid provided_rpc parameter: method name is empty";
+        _setup_ok = false;
+        return;
+      }
+    }
+  }
+
+  void start_receiver() {
+    try {
+      _rpc_endpoint.connect(_socket_path);
+      for (const auto &method : _provided_methods) {
+        _rpc_endpoint.register_method(method);
+      }
+      _receiver_running.store(true);
+      _receiver_thread = thread(&UnoQSourcePlugin::receiver_loop, this);
+    } catch (...) {
+      _receiver_running.store(false);
+      _rpc_endpoint.close();
+      throw;
+    }
+  }
+
+  void stop_receiver() {
+    if (_receiver_thread.joinable()) {
+      _receiver_running.store(false);
+      _receiver_thread.join();
+    }
+    _receiver_running.store(false);
+    _rpc_endpoint.close();
+  }
+
+  void receiver_loop() {
+    while (_receiver_running.load()) {
+      try {
+        RPCClient::Message message = _rpc_endpoint.receive();
+        const bool queued = enqueue_message(message.to_json());
+        if (message.expects_response()) {
+          _rpc_endpoint.respond(message.msgid, queued);
+        }
+      } catch (const std::exception &e) {
+        const string error = e.what();
+        if (!_receiver_running.load()) {
+          break;
+        }
+        if (error.find("Timed out waiting for RPC message") != string::npos) {
+          continue;
+        }
+        set_receiver_error("RPC receiver failed: " + error);
+        _receiver_running.store(false);
+        break;
+      }
+    }
+
+    if (_rpc_endpoint.is_open()) {
+      try {
+        _rpc_endpoint.reset_methods();
+      } catch (const std::exception &) {
+      }
+      _rpc_endpoint.close();
+    }
+  }
+
+  bool enqueue_message(json message) {
+    lock_guard<mutex> lock(_queue_mutex);
+    if (_message_queue.size() >= _max_queue) {
+      if (_overflow_policy == "drop_newest") {
+        return false;
+      }
+      _message_queue.pop_front();
+    }
+    _message_queue.push_back(std::move(message));
+    return true;
+  }
+
+  void set_receiver_error(string error) {
+    lock_guard<mutex> lock(_queue_mutex);
+    if (_receiver_error.empty()) {
+      _receiver_error = std::move(error);
+    }
+  }
+
+  static constexpr size_t default_max_queue = 256;
+
+  SourceMode _mode = SourceMode::call;
   json _rpc_call = json::object();
   bool _setup_ok = true;
   RPCClient::Client _rpc_client{};
-  string_view _socket_path = RPCClient::default_socket_path;
+  RPCClient::Endpoint _rpc_endpoint{};
+  atomic<bool> _receiver_running{false};
+  thread _receiver_thread;
+  mutex _queue_mutex;
+  deque<json> _message_queue;
+  string _receiver_error;
+  vector<string> _provided_methods;
+  size_t _max_queue = default_max_queue;
+  string _overflow_policy = "drop_oldest";
+  string _socket_path = string(RPCClient::default_socket_path);
 };
 
 /*
@@ -145,6 +422,29 @@ For testing purposes, when directly executing the plugin
 int main(int argc, char const *argv[]) {
   UnoQSourcePlugin plugin;
   json output, params;
+
+  if (argc > 1 && string(argv[1]) == "notify") {
+    params["mode"] = "notify";
+    params["provided_rpc"] = argc > 2 ? argv[2] : "mads_notify";
+    params["socket_path"] = argc > 3 ? argv[3] : "/tmp/mads-rpc.sock";
+    plugin.set_params(params);
+
+    for (int i = 0; i < 300; ++i) {
+      const auto result = plugin.get_output(output);
+      if (result == return_type::success) {
+        cout << "Output: " << output << endl;
+        return 0;
+      }
+      if (result == return_type::error || result == return_type::critical) {
+        cout << "Output: " << output << endl;
+        return 1;
+      }
+      this_thread::sleep_for(chrono::milliseconds(100));
+    }
+
+    cout << "No notification received" << endl;
+    return 2;
+  }
 
   // Set example values to params
   params["rpc_call"] = "array";

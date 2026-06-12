@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <ostream>
 #include <sstream>
 #include <stdexcept>
@@ -21,6 +22,7 @@ namespace {
 
 constexpr int request_type = 0;
 constexpr int response_type = 1;
+constexpr int notification_type = 2;
 constexpr int socket_timeout_seconds = 5;
 
 std::string errno_message(std::string_view context) {
@@ -38,9 +40,10 @@ void validate_socket_path(std::string_view socket_path) {
   }
 }
 
-void set_socket_timeouts(int socket_fd) {
+void set_socket_timeouts(int socket_fd,
+                         int timeout_seconds = socket_timeout_seconds) {
   timeval tv{};
-  tv.tv_sec = socket_timeout_seconds;
+  tv.tv_sec = timeout_seconds;
 
   if (::setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
     throw std::runtime_error(errno_message("setsockopt SO_RCVTIMEO failed"));
@@ -60,6 +63,7 @@ void set_socket_timeouts(int socket_fd) {
 
 void close_fd(int &socket_fd) {
   if (socket_fd >= 0) {
+    ::shutdown(socket_fd, SHUT_RDWR);
     ::close(socket_fd);
     socket_fd = -1;
   }
@@ -133,6 +137,19 @@ Value object_to_value(const msgpack::object &obj) {
   }
 }
 
+std::vector<Value> object_to_values(const msgpack::object &obj) {
+  if (obj.type != msgpack::type::ARRAY) {
+    throw std::runtime_error("RPC parameters must be an array");
+  }
+
+  std::vector<Value> values;
+  values.reserve(obj.via.array.size);
+  for (uint32_t i = 0; i < obj.via.array.size; ++i) {
+    values.emplace_back(object_to_value(obj.via.array.ptr[i]));
+  }
+  return values;
+}
+
 Value json_to_value(const nlohmann::json &value) {
   if (value.is_null()) {
     return nullptr;
@@ -189,6 +206,14 @@ nlohmann::json value_to_json(const Value &value) {
         }
       },
       value.storage());
+}
+
+nlohmann::json values_to_json(const std::vector<Value> &values) {
+  nlohmann::json output = nlohmann::json::array();
+  for (const auto &value : values) {
+    output.push_back(value_to_json(value));
+  }
+  return output;
 }
 
 std::pair<std::string, std::vector<Value>> parse_json_call(
@@ -271,6 +296,54 @@ msgpack::object_handle receive_message(int socket_fd) {
   }
 }
 
+msgpack::object_handle receive_message(int socket_fd, msgpack::unpacker &unp) {
+  while (true) {
+    msgpack::object_handle oh;
+    if (unp.next(oh)) {
+      return oh;
+    }
+
+    unp.reserve_buffer(4096);
+    ssize_t n = ::recv(socket_fd, unp.buffer(), unp.buffer_capacity(), 0);
+    if (n < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        throw std::runtime_error("Timed out waiting for RPC message");
+      }
+      throw std::runtime_error(errno_message("Error receiving RPC message"));
+    }
+    if (n == 0) {
+      throw std::runtime_error("Connection closed before RPC message");
+    }
+
+    unp.buffer_consumed(static_cast<size_t>(n));
+  }
+}
+
+void send_response(int socket_fd, uint32_t msgid, const Value *result,
+                   std::string_view error) {
+  msgpack::sbuffer buffer;
+  msgpack::packer<msgpack::sbuffer> pk(buffer);
+  pk.pack_array(4);
+  pk.pack(response_type);
+  pk.pack(msgid);
+  if (error.empty()) {
+    pk.pack_nil();
+  } else {
+    pk.pack(std::string(error));
+  }
+
+  if (result == nullptr) {
+    pk.pack_nil();
+  } else {
+    pack_value(pk, *result);
+  }
+
+  send_all(socket_fd, buffer.data(), buffer.size());
+}
+
 std::string value_to_string(const Value &value);
 
 std::string array_to_string(const Value::array_type &values) {
@@ -309,6 +382,10 @@ std::string value_to_string(const Value &value) {
 
 } // namespace
 
+struct Endpoint::StreamState {
+  msgpack::unpacker unpacker;
+};
+
 Value::Value(const char *value) {
   if (value == nullptr) {
     _value = std::monostate{};
@@ -318,6 +395,13 @@ Value::Value(const char *value) {
 }
 
 nlohmann::json Value::to_json() const { return value_to_json(*this); }
+
+nlohmann::json Message::to_json() const {
+  return {
+      {"rpc_func", method},
+      {"rpc_args", values_to_json(args)}
+  };
+}
 
 std::ostream &operator<<(std::ostream &out, const Value &value) {
   out << value_to_string(value);
@@ -436,6 +520,172 @@ Result Client::call(std::string_view method,
 Result Client::call(nlohmann::json call_payload) {
   auto [method, args] = parse_json_call(call_payload);
   return call(method, args);
+}
+
+Endpoint::Endpoint() : _stream(std::make_unique<StreamState>()) {}
+
+Endpoint::Endpoint(std::string_view socket_path) : Endpoint() {
+  connect(socket_path);
+}
+
+Endpoint::~Endpoint() { close(); }
+
+void Endpoint::close() { close_fd(_socket_fd); }
+
+void Endpoint::connect(std::string_view socket_path) {
+  validate_socket_path(socket_path);
+  close();
+  _stream = std::make_unique<StreamState>();
+
+  _socket_fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+  if (_socket_fd < 0) {
+    throw std::runtime_error(errno_message("Error creating socket"));
+  }
+
+  try {
+    set_socket_timeouts(_socket_fd, 1);
+
+    sockaddr_un server_addr{};
+    server_addr.sun_family = AF_UNIX;
+    std::memcpy(server_addr.sun_path, socket_path.data(), socket_path.size());
+    server_addr.sun_path[socket_path.size()] = '\0';
+
+    if (::connect(_socket_fd, reinterpret_cast<sockaddr *>(&server_addr),
+                  sizeof(server_addr)) < 0) {
+      throw std::runtime_error(errno_message("Error connecting to socket"));
+    }
+  } catch (...) {
+    close();
+    throw;
+  }
+}
+
+void Endpoint::register_method(std::string_view method) {
+  if (method.empty()) {
+    throw std::invalid_argument("RPC method name is empty");
+  }
+  request("$/register", std::vector<Value>{std::string(method)});
+}
+
+void Endpoint::reset_methods() {
+  if (is_open()) {
+    request("$/reset");
+  }
+}
+
+Result Endpoint::request(std::string_view method,
+                         const std::vector<Value> &args) {
+  if (!is_open()) {
+    throw std::runtime_error("Socket is not open");
+  }
+  if (method.empty()) {
+    throw std::invalid_argument("RPC method name is empty");
+  }
+
+  const uint32_t request_msgid = _next_msgid++;
+
+  msgpack::sbuffer buffer;
+  msgpack::packer<msgpack::sbuffer> pk(buffer);
+  pk.pack_array(4);
+  pk.pack(request_type);
+  pk.pack(request_msgid);
+  pk.pack(std::string(method));
+  pack_array(pk, args);
+
+  send_all(_socket_fd, buffer.data(), buffer.size());
+
+  while (true) {
+    msgpack::object_handle response_handle =
+        receive_message(_socket_fd, _stream->unpacker);
+    msgpack::object response = response_handle.get();
+    if (response.type != msgpack::type::ARRAY || response.via.array.size == 0) {
+      throw std::runtime_error("Invalid RPC message format");
+    }
+
+    const int actual_type = response.via.array.ptr[0].as<int>();
+    if (actual_type == notification_type) {
+      continue;
+    }
+    if (actual_type == request_type) {
+      if (response.via.array.size == 4) {
+        const uint32_t msgid = response.via.array.ptr[1].as<uint32_t>();
+        respond_error(msgid, "endpoint is waiting for a router response");
+      }
+      continue;
+    }
+    if (actual_type != response_type || response.via.array.size != 4) {
+      throw std::runtime_error("Invalid RPC response format");
+    }
+
+    const uint32_t response_msgid = response.via.array.ptr[1].as<uint32_t>();
+    if (response_msgid != request_msgid) {
+      throw std::runtime_error("RPC response does not match request");
+    }
+
+    const msgpack::object &error = response.via.array.ptr[2];
+    if (error.type != msgpack::type::NIL) {
+      throw std::runtime_error("RPC error: " + object_to_debug_string(error));
+    }
+
+    return object_to_value(response.via.array.ptr[3]);
+  }
+}
+
+Message Endpoint::receive() {
+  if (!is_open()) {
+    throw std::runtime_error("Socket is not open");
+  }
+
+  msgpack::object_handle handle = receive_message(_socket_fd, _stream->unpacker);
+  msgpack::object message = handle.get();
+  if (message.type != msgpack::type::ARRAY || message.via.array.size == 0) {
+    throw std::runtime_error("Invalid RPC message format");
+  }
+
+  const int actual_type = message.via.array.ptr[0].as<int>();
+  if (actual_type == notification_type) {
+    if (message.via.array.size != 3) {
+      throw std::runtime_error("Invalid RPC notification format");
+    }
+    return Message{
+        Message::Type::notification,
+        0,
+        message.via.array.ptr[1].as<std::string>(),
+        object_to_values(message.via.array.ptr[2])
+    };
+  }
+
+  if (actual_type == request_type) {
+    if (message.via.array.size != 4) {
+      throw std::runtime_error("Invalid RPC request format");
+    }
+    return Message{
+        Message::Type::request,
+        message.via.array.ptr[1].as<uint32_t>(),
+        message.via.array.ptr[2].as<std::string>(),
+        object_to_values(message.via.array.ptr[3])
+    };
+  }
+
+  throw std::runtime_error("Unsupported inbound RPC message type: " +
+                           std::to_string(actual_type));
+}
+
+void Endpoint::respond(uint32_t msgid, const Value &result) {
+  if (!is_open()) {
+    throw std::runtime_error("Socket is not open");
+  }
+  send_response(_socket_fd, msgid, &result, {});
+}
+
+void Endpoint::respond_error(uint32_t msgid, std::string_view error) {
+  if (!is_open()) {
+    throw std::runtime_error("Socket is not open");
+  }
+  if (error.empty()) {
+    throw std::invalid_argument("RPC error response must not be empty");
+  }
+  send_response(_socket_fd, msgid, nullptr, error);
 }
 
 } // namespace RPCClient
