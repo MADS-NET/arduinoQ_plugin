@@ -23,8 +23,11 @@ execute_process(
 if(GIT_VERSION MATCHES "^v")
   string(SUBSTRING "${GIT_VERSION}" 1 -1 GIT_VERSION)
 endif()
-if(NOT GIT_VERSION OR NOT GIT_VERSION MATCHES "^[0-9]+(\\.[0-9]+){0,3}$")
+if(NOT GIT_VERSION MATCHES "^[0-9]+(\\.[0-9]+)?(\\.[0-9]+)?(\\.[0-9]+)?$")
   set(GIT_VERSION "0.1.0")
+  message(STATUS "Using default version: ${GIT_VERSION}")
+else()
+  message(STATUS "Using Git tag version: ${GIT_VERSION}")
 endif()
 
 
