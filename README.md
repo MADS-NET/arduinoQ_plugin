@@ -48,6 +48,7 @@ sudo tar xzf path/to/arduinoq*.tar.gz -C "$(mads -p)" --strip-components=1
 The project provides the following binaries:
 
 * `qrpc_client`: A command-line tool for sending RPC calls to the Arduino Uno Q and receiving responses (useful for testing)
+* `qrpc_throughput`: A command-line tool that benchmarks the throughput of msgpack RPC calls from the CPU (Linux) side to the MCU side. It reads a JSON description of which RPC methods to exercise and how many times, runs each method one at a time, and reports per-method latency and throughput statistics (see [Throughput benchmarking](#throughput-benchmarking))
 * `qrpc_dummy`: A dummy RPC router/server that simulates the behavior of the Arduino Uno Q for testing purposes (useful for development without the actual hardware). It implements the RPC functions `ping()` (which returns `pong`), `add(v1, v2)` (which takes two integers and returns their sum), `echo(arg1, arg2, arg3, ...)` (which echoes all received arguments), and `emit_notify(method, args...)` (which emits a local test notification to a registered method).
 * `unoq_source`: A MADS source plugin that either routinely executes a given RPC call and publishes its output on a MADS topic, or registers a CPU-side RPC method and publishes MCU-to-CPU notifications received through the Arduino Router.
 * `unoq_sink`: A MADS sink plugin that executes a given RPC call every time a message is received on a given MADS topic. RPC function name and arguments are encoded in the received message (see next section)
@@ -76,6 +77,67 @@ The sketch `rpc_server_modulino.ino` needs a **Modulino Movement** IMU board, an
 The sketch `rpc_notify.ino` shows the opposite direction: the MCU calls
 `Bridge.notify("mads_notify", ...)`, and `unoq_source` can publish those
 notifications as MADS messages when configured in notify mode.
+
+## Throughput benchmarking
+
+The `qrpc_throughput` tool measures how fast msgpack RPC calls can be issued
+from the CPU side of the Uno Q to the MCU side. It expects a JSON description
+of the methods to test (read from a file argument or from `stdin`), runs each
+method one at a time over a single shared connection, and reports statistics.
+
+```bash
+# from a file
+qrpc_throughput throughput_example.json
+
+# from stdin
+qrpc_throughput < throughput_example.json
+
+# machine-readable JSON results on stdout
+qrpc_throughput --json throughput_example.json
+
+# override the socket path declared in the JSON
+qrpc_throughput --socket /tmp/mads-rpc.sock throughput_example.json
+```
+
+The input JSON has the following shape:
+
+```json
+{
+  "socket": "/var/run/arduino-router.sock",
+  "warmup": 50,
+  "iterations": 2000,
+  "tests": [
+    { "rpc_func": "ping", "rpc_args": [] },
+    { "rpc_func": "add", "rpc_args": [3, 4], "iterations": 5000 },
+    { "rpc_func": "echo", "rpc_args": ["hello", 42, 3.14, true], "label": "echo-4" }
+  ]
+}
+```
+
+* `socket` (optional): path to the Arduino Router socket. Defaults to
+  `/var/run/arduino-router.sock`; overridden by `--socket`.
+* `warmup` (optional, default `0`): number of unmeasured calls performed before
+  timing each test, to prime the connection.
+* `iterations` (optional, default `1000`): default number of timed calls per
+  test; can be overridden per test.
+* `tests`: array of test specifications. Each entry needs `rpc_func` (the MCU
+  method name) and may include `rpc_args` (same argument types as the other
+  plugins), `iterations`, and a human-readable `label`.
+
+For each test the tool reports the number of successful and failed calls, the
+overall throughput (successful calls per second), and the latency distribution
+(min, mean, median, p90, p95, p99, max, and standard deviation, in
+microseconds). Failed calls are counted but excluded from the latency
+statistics. By default a human-readable table is printed; with `--json` the
+full statistics are emitted as JSON on `stdout` (progress is kept on `stderr`).
+
+You can try it locally without hardware against the `qrpc_dummy` server, which
+implements `ping`, `add`, `echo`, and `array`:
+
+```bash
+build/qrpc_dummy /tmp/mads-rpc.sock &
+qrpc_throughput --socket /tmp/mads-rpc.sock throughput_example.json
+```
 
 ## MADS Director file
 
