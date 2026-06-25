@@ -16,10 +16,11 @@ uint32_t Counter = 0;
 uint32_t LastNotifyMicros = 0;
 
 void setup() {
-  Monitor.begin();
-  Monitor.print("Arduino Router starting... ");
+  Serial.begin(115200);
+  Serial.println("Arduino Router starting... ");
   Bridge.begin();
-  Monitor.println("done!");
+  Serial.println("Bridge started, will notify via RPC as mads_notify.");
+  Serial.println("done!");
 }
 
 void loop() {
