@@ -79,15 +79,15 @@ void task_watchdog() {
   static auto state = HIGH;
   digitalWrite(LED_BUILTIN, state ? LOW : HIGH);
   state = (state == LOW ? HIGH : LOW);
-  // You might also print con Monitor console...
-  // Monitor.println(Buffer.head);
+  // You might also print con Serial console...
+  // Serial.println(Buffer.head);
 }
 
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
-  Monitor.begin();
-  Monitor.print("Arduino Router starting... ");
+  Serial.begin(115200);
+  Serial.println("Arduino Router starting... ");
   // Movement setup
   Modulino.begin();
   Movement.begin();
@@ -102,8 +102,9 @@ void setup() {
   // Bridge setup
   Bridge.begin();
   Bridge.provide("get_fft", get_fft);
+  Serial.println("Providing RPC call get_fft()");
 
-  Monitor.println("done!");
+  Serial.println("done!");
 }
 
 void loop() {

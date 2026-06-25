@@ -159,6 +159,8 @@ add_plugin(unoq_sink SRCS ${SRC_DIR}/rpc.cpp)
 add_plugin(unoq_filter SRCS ${SRC_DIR}/rpc.cpp)
 add_executable(qrpc_call ${SRC_DIR}/rpc_call.cpp ${SRC_DIR}/rpc.cpp)
 list(APPEND TARGET_LIST qrpc_call)
+add_executable(qrpc_throughput ${SRC_DIR}/rpc_throughput.cpp ${SRC_DIR}/rpc.cpp)
+list(APPEND TARGET_LIST qrpc_throughput)
 add_executable(qrpc_dummy ${SRC_DIR}/dummy.cpp)
 list(APPEND TARGET_LIST qrpc_dummy)
 

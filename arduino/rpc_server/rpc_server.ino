@@ -38,18 +38,30 @@ struct ThreeArrays {
 
 JsonDocument Document;
 
+// using ActualSerial = SerialPort;
+
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
-  Monitor.begin();
-  Monitor.print("Arduino Router starting... ");
+  Serial.begin(115200);
+  Serial.println("Arduino Router starting... ");
   Bridge.begin();
   // Look at the docs for the difference between provide() and provide_safe()
   Bridge.provide("set_led_state", set_led_state);
+  Serial.println("Providing RPC call set_led_state(bool)");
+
   Bridge.provide("get_digital_pin", get_digital_pin);
+  Serial.println("Providing RPC call get_digital_pin(int)");
+
   Bridge.provide("get_analog_pin", get_analog_pin);
+  Serial.println("Providing RPC call get_analog_pin(int)");
+
   Bridge.provide("get_json", get_json);
+  Serial.println("Providing RPC call get_json()");
+
   Bridge.provide_safe("get_three_arrays", get_three_arrays);
-  Monitor.println("done!");
+  Serial.println("Providing RPC call get_three_arrays()");
+
+  Serial.println("done!");
 }
 
 void loop() {

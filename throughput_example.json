@@ -1,0 +1,11 @@
+{
+  "socket": "/tmp/mads-rpc.sock",
+  "warmup": 50,
+  "iterations": 2000,
+  "tests": [
+    { "rpc_func": "ping", "rpc_args": [] },
+    { "rpc_func": "add", "rpc_args": [3, 4], "iterations": 5000 },
+    { "rpc_func": "echo", "rpc_args": ["hello", 42, 3.14, true], "label": "echo-4" },
+    { "rpc_func": "array", "rpc_args": [] }
+  ]
+}
