@@ -118,7 +118,7 @@ private:
                 |___/                                      
 Enable the class as plugin 
 */
-INSTALL_SINK_DRIVER(UnoQSinkPlugin, json)
+MADS_REGISTER_PLUGINS(UnoQSinkPlugin)
 
 
 /*

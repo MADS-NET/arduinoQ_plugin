@@ -3,7 +3,7 @@
   "requirements": {
     "Common": {
       "note": [
-        "Requires MADS 2.1.0 or later",
+        "Requires MADS 2.4.0 or later",
         "Requires an Arduino Uno Q properly programmed",
         "Look at https://github.com/MADS-NET/arduinoQ_plugin/tree/main/arduino for examples",
         "Provides unoq_source, unoq_filter, and unoq_sink plugins to read and write data to the Arduino Uno Q MCU"
