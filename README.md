@@ -6,7 +6,7 @@ A collection of [MADS](https://mads-net.github.io) plugins for working with Ardu
 
 > See the official [guide](https://mads-net.github.io/guides/arduino_uno_q.html).
 
-*Required MADS version: 2.1.0.*
+> This plugin has been updated for MADS v3.
 
 ## The Arduino Uno Q
 
